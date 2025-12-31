@@ -68,6 +68,8 @@ class PyomoDispatchPlantRule:
 
 
     def initialize_parameters(self, commodity_in: list, commodity_demand: list,
+                              commodity_met_value_in: list,
+                              commodity_buy_price_in: list,
                               dispatch_params:dict):
         """Initialize parameters method."""
         self.time_weighting_factor = (
@@ -76,7 +78,10 @@ class PyomoDispatchPlantRule:
         for tech in self.source_techs:
             name = tech+"_rule"
             pyomo_block = getattr(self.tech_dispatch_models, name)
-            pyomo_block.initialize_parameters(commodity_in, commodity_demand, dispatch_params)
+            pyomo_block.initialize_parameters(commodity_in, commodity_demand,
+                                              commodity_met_value_in,
+                                              commodity_buy_price_in,
+                                              dispatch_params)
 
     def _create_variables_and_ports(self, hybrid, t):
 
@@ -134,15 +139,19 @@ class PyomoDispatchPlantRule:
 
         pyo.TransformationFactory("network.expand_arcs").apply_to(self.model)
 
-    def update_time_series_parameters(self, start_time: int,
-                                      commodity_in = list,
-                                      commodity_demand = list):
+    def update_time_series_parameters(self, commodity_in: list, commodity_demand: list,
+                                commodity_met_value_in: list,
+                                commodity_buy_price_in: list):
         for tech in self.source_techs:
             name = tech+"_rule"
             pyomo_block = getattr(self.tech_dispatch_models, name)
-            pyomo_block.update_time_series_parameters(start_time,
-                                                      commodity_in,
-                                                      commodity_demand)
+            pyomo_block.update_time_series_parameters(commodity_in,
+                                                      commodity_demand,
+                                                      commodity_met_value_in,
+                                                      commodity_buy_price_in)
+
+        print(sum(self.power_source_gen_vars))
+        print(sum(self.load_vars))
 
     def create_min_operating_cost_expression(self):
         self._delete_objective()
@@ -237,6 +246,13 @@ class PyomoDispatchPlantRule:
     @property
     def system_load(self) -> list:
         return [self.blocks[t].system_load.value for t in self.blocks.index_set()]
+
+    @property
+    def commodity_bought(self) -> list:
+        """Storage commodity bought."""
+        return [
+            self.blocks[t].commodity_bought.value for t in self.blocks.index_set()
+        ]
 
 
     @property

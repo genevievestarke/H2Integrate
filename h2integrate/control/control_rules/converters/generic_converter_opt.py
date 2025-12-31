@@ -45,6 +45,7 @@ class PyomoDispatchGenericConverterMinOperatingCosts:
         print("HEYYYY")
 
     def initialize_parameters(self, commodity_in: list, commodity_demand: list,
+                                commodity_met_value_in: list, commodity_buy_price_in: list,
                               dispatch_inputs: dict):
         """Initialize parameters method.
         """
@@ -172,11 +173,9 @@ class PyomoDispatchGenericConverterMinOperatingCosts:
         pass
 
     # Update time series parameters for next optimization window
-    def update_time_series_parameters(self, start_time: int,
-                                      commodity_in:list,
-                                      commodity_demand:list,
-                                    #   time_commodity_met_value:list
-                                      ):
+    def update_time_series_parameters(self, commodity_in: list, commodity_demand: list,
+                                commodity_met_value_in: list,
+                                commodity_buy_price_in: list):
         """Update time series parameters method.
 
         Args:

@@ -153,7 +153,7 @@ class PyomoControllerBaseClass(ControllerBaseClass):
         Returns:
             callable: Function(performance_model, performance_model_kwargs, inputs, commodity_name)
                 executing rolling-window heuristic dispatch or optimization and returning:
-                (total_out, storage_out, unmet_demand, unused_commodity, soc)
+                (total_out, storage_out, unmet_demand, unused_commodity, soc, bought_commodity)
         """
         # initialize the pyomo model
         self.pyomo_model = pyomo.ConcreteModel()
@@ -180,10 +180,8 @@ class PyomoControllerBaseClass(ControllerBaseClass):
                     ]
                 # create pyomo block and set attr
                 blocks = pyomo.Block(index_set, rule=dispatch_block_rule_function)
-                print("HIII", blocks)
                 setattr(self.pyomo_model, source_tech, blocks)
                 self.source_techs.append(source_tech)
-                print(getattr(self.pyomo_model, source_tech))
             else:
                 continue
 
@@ -234,6 +232,8 @@ class PyomoControllerBaseClass(ControllerBaseClass):
                         Surplus generation + storage discharge not used to meet demand.
                     soc :
                         State of charge trajectory (percent of capacity).
+                    bought_commodity :
+                        Commodity bought to meet demand each timestep.
 
             Raises:
                 NotImplementedError:
@@ -242,9 +242,6 @@ class PyomoControllerBaseClass(ControllerBaseClass):
             Notes:
                 1. Arrays returned have length self.n_timesteps (full simulation period).
             """
-            # TODO: implement optional kwargs for this method
-            self.initialize_parameters(inputs[f"{commodity_name}_in"],
-                                       inputs[f"{commodity_name}_demand"])
 
             # initialize outputs
             unmet_demand = np.zeros(self.n_timesteps)
@@ -252,11 +249,22 @@ class PyomoControllerBaseClass(ControllerBaseClass):
             total_commodity_out = np.zeros(self.n_timesteps)
             unused_commodity = np.zeros(self.n_timesteps)
             soc = np.zeros(self.n_timesteps)
+            bought_commodity = np.zeros(self.n_timesteps)
 
             # get the starting index for each control window
             window_start_indices = list(range(0, self.n_timesteps, self.config.n_control_window))
 
             control_strategy = self.options["tech_config"]["control_strategy"]["model"]
+
+            # TODO: implement optional kwargs for this method
+            if "optimized" in control_strategy:
+                self.initialize_parameters(inputs[f"{commodity_name}_in"],
+                                       inputs[f"{commodity_name}_demand"],
+                                       inputs["demand_met_value_in"],
+                                       inputs[f"{commodity_name}_buy_price_in"])
+            else:
+                self.initialize_parameters(inputs[f"{commodity_name}_in"],
+                                       inputs[f"{commodity_name}_demand"])
 
             # loop over all control windows, where t is the starting index of each window
             for t in window_start_indices:
@@ -279,9 +287,17 @@ class PyomoControllerBaseClass(ControllerBaseClass):
                     )
 
                 elif "optimized" in control_strategy:
+                    demand_met_value_in = inputs["demand_met_value_in"][
+                        t : t + self.config.n_control_window
+                    ]
+                    commodity_buy_price_in = inputs[f"{commodity_name}_buy_price_in"][
+                        t : t + self.config.n_control_window
+                    ]
                     # Update time series parameters for the optimization method
-                    self.update_time_series_parameters(commodity_in=commodity_in, 
-                                                       commodity_demand=demand_in)
+                    self.update_time_series_parameters(commodity_in=commodity_in,
+                                                       commodity_demand=demand_in,
+                                                       commodity_met_value_in=demand_met_value_in,
+                                                       commodity_buy_price_in=commodity_buy_price_in)
                     # Run dispatch optimzation to minimize costs while meeting demand
                     self.solve_dispatch_model(
                         commodity_in,
@@ -325,8 +341,11 @@ class PyomoControllerBaseClass(ControllerBaseClass):
                     unused_commodity[j] = np.maximum(
                         0, storage_commodity_out[j] + commodity_in[j - t] - demand_in[j - t]
                     )
+                    bought_commodity[j] = np.maximum(self.opt_bought_commodity[j-t], 0)
 
-            return total_commodity_out, storage_commodity_out, unmet_demand, unused_commodity, soc
+
+            return total_commodity_out, storage_commodity_out, unmet_demand, unused_commodity,\
+                    soc, bought_commodity
 
         return pyomo_dispatch_solver
 
@@ -869,20 +888,29 @@ class OptimizedDispatchController(SimpleBatteryControllerHeuristic):
 
 
     # Initialize parameters for optimization model
-    def initialize_parameters(self, commodity_in, commodity_demand):
+    def initialize_parameters(self, commodity_in, commodity_demand,
+                              commodity_met_value_in,
+                              commodity_buy_price_in):
         self.hybrid_dispatch_model = self._create_dispatch_optimization_model()
         self.hybrid_dispatch_rule.create_min_operating_cost_expression()
         self.hybrid_dispatch_rule.create_arcs()
         assert_units_consistent(self.hybrid_dispatch_model)
         self.problem_state = DispatchProblemState()
 
-        self.hybrid_dispatch_rule.initialize_parameters(commodity_in, commodity_demand, 
+        self.hybrid_dispatch_rule.initialize_parameters(commodity_in, commodity_demand,
+                                                        commodity_met_value_in,
+                                                        commodity_buy_price_in,
                                                        self.dispatch_inputs)
 
-    def update_time_series_parameters(self, start_time = 0, commodity_in = None, commodity_demand = None):
-        self.hybrid_dispatch_rule.update_time_series_parameters(start_time,
-                                                                commodity_in,
-                                                                commodity_demand)
+    def update_time_series_parameters(self, start_time = 0, commodity_in = None,
+                                      commodity_demand = None,
+                                      commodity_met_value_in = None,
+                                      commodity_buy_price_in = None):
+
+        self.hybrid_dispatch_rule.update_time_series_parameters(commodity_in,
+                                                                commodity_demand,
+                                                                commodity_met_value_in,
+                                                                commodity_buy_price_in)
 
     def solve_dispatch_model(
         self,
@@ -1013,6 +1041,13 @@ class OptimizedDispatchController(SimpleBatteryControllerHeuristic):
         """
         return self.hybrid_dispatch_rule.storage_commodity_out
 
+    @property
+    def opt_bought_commodity(self) -> list:
+        """
+        Commanded dispatch including available commodity at current time step that has not
+        been used to charge the battery.
+        """
+        return self.hybrid_dispatch_rule.commodity_bought
 
 class SolverOptions:
     """Class for housing solver options"""

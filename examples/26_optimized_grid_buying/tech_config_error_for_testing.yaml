@@ -41,14 +41,13 @@ technologies:
     dispatch_rule_set:
       model: "pyomo_dispatch_generic_storage"
     control_strategy:
-      model: "optimized_dispatch_controller"
+      model: "heuristic_load_following_controller"
     performance_model:
       model: "pysam_battery"
     cost_model:
       model: "atb_battery_cost"
     model_inputs:
       shared_parameters:
-        commodity_name: "electricity"
         max_charge_rate: 100000
         max_capacity: 500000
         n_control_window: 24
@@ -57,23 +56,18 @@ technologies:
         max_charge_percent: 0.9
         min_charge_percent: 0.1
         system_commodity_interface_limit: 1e12
-        time_weighting_factor: 0.995
-        charge_efficiency: 0.938
-        discharge_efficiency: 0.938
-        commodity_storage_units: "kW"
-        cost_per_charge: 0.05
-        cost_per_discharge: 0.1
-        commodity_met_value: 2        
-        cost_per_production: 0.01
       performance_parameters:
         system_model_source: "pysam"
         chemistry: "LFPGraphite"
       cost_parameters:
         cost_year: 2022
-        commodity_units: "kW"
         energy_capex: 310 # $/kWh from 2024 ATB year 2025
         power_capex: 311 # $/kW from 2024 ATB year 2025
         opex_fraction: 0.25 # 0.25% of capex per year from 2024 ATB
       control_parameters:
-        # commodity_storage_units: "kW"
-        tech_name: "battery"
+        commodity_name: "electricity"
+        commodity_storage_units: "kW"
+        tech_name: "wrong_tech_name"
+      dispatch_rule_parameters:
+        commodity_name: "electricity"
+        commodity_storage_units: "kW"

@@ -47,16 +47,16 @@ class PyomoRuleStorageMinOperatingCosts:
 
 
     def initialize_parameters(self, commodity_in: list, commodity_demand: list,
+                                commodity_met_value_in: list, commodity_buy_price_in: list,
                               dispatch_inputs: dict):
         # Dispatch Parameters
         self.cost_per_charge = dispatch_inputs["cost_per_charge"]
         self.cost_per_discharge = dispatch_inputs["cost_per_discharge"]
-        self.commodity_met_value = dispatch_inputs["commodity_met_value"]
+
+        # self.commodity_met_value = dispatch_inputs["commodity_met_value"]
         # Storage parameters
         self.minimum_storage = 0.0
         self.maximum_storage = dispatch_inputs["max_capacity"]
-        print("maximum_storage",self.maximum_storage)
-        print(self.minimum_storage)
         self.minimum_soc = dispatch_inputs["min_charge_percent"]
         self.maximum_soc = dispatch_inputs["max_charge_percent"]
         self.initial_soc = dispatch_inputs["initial_soc_percent"]
@@ -74,6 +74,12 @@ class PyomoRuleStorageMinOperatingCosts:
         self.load_production_limit = [commodity_demand[t]
                                         for t in self.blocks.index_set()
                                         ]
+        self.commodity_met_value = [commodity_met_value_in[t]
+                                    for t in self.blocks.index_set()
+                                    ]
+        self.commodity_buy_price = [commodity_buy_price_in[t]
+                                    for t in self.blocks.index_set()
+                                    ]
         self._set_initial_soc_constraint()
 
 
@@ -219,10 +225,22 @@ class PyomoRuleStorageMinOperatingCosts:
             default=1e-3,
             within=pyo.NonNegativeReals,
             mutable=True,
-            units=pyo.units.USD,
+            units="(pyo.units.USD * py.units."+ self.commodity_storage_units+
+                    ") / pyo.units." + self.commodity_storage_units+
+                    "h",
         )
         pyomo_model.commodity_met_value = pyo.Param(
             doc="Commodity demand met value per generation [$/"
+            + self.commodity_storage_units
+            + "]",
+            default=0.0,
+            within=pyo.Reals,
+            mutable=True,
+            units=eval("pyo.units.USD / pyo.units." + self.commodity_storage_units+
+                       "h"),
+        )
+        pyomo_model.commodity_buy_price = pyo.Param(
+            doc="Commodity buy price per generation [$/"
             + self.commodity_storage_units
             + "]",
             default=0.0,
@@ -338,6 +356,14 @@ class PyomoRuleStorageMinOperatingCosts:
             bounds=(0, pyomo_model.commodity_load_demand),
             units=eval("pyo.units." + self.commodity_storage_units),
         )
+        pyomo_model.commodity_bought = pyo.Var(
+            doc="Commodity bought for the system ["
+            + self.commodity_storage_units
+            + "]",
+            domain=pyo.NonNegativeReals,
+            bounds=(0, pyomo_model.commodity_load_demand),
+            units=eval("pyo.units." + self.commodity_storage_units),
+        )
         pyomo_model.is_generating = pyo.Var(
             doc="System is producing commodity binary [-]",
             domain=pyo.Binary,
@@ -399,22 +425,22 @@ class PyomoRuleStorageMinOperatingCosts:
         pyomo_model.balance = pyo.Constraint(
             doc="Transmission energy balance",
             expr=(
-                pyomo_model.commodity_out
+                pyomo_model.commodity_out - pyomo_model.commodity_bought
                 == pyomo_model.system_production - pyomo_model.system_load
             ),
         )
         pyomo_model.production_limit = pyo.Constraint(
-            doc="Transmission limit on electricity sales",
+            doc="Transmission limit on commodity sales",
             expr=pyomo_model.commodity_out
             <= pyomo_model.commodity_load_demand * pyomo_model.is_generating,
         )
-        # pyomo_model.purchases_transmission_limit = pyomo.Constraint(
-        #     doc="Transmission limit on electricity purchases",
-        #     expr=(
-        #         grid.electricity_purchased
-        #         <= grid.load_transmission_limit * (1 - grid.is_generating)
-        #     ),
-        # )
+        pyomo_model.purchases_transmission_limit = pyo.Constraint(
+            doc="Transmission limit on commodity purchases",
+            expr=(
+                pyomo_model.commodity_bought
+                <= pyomo_model.load_production_limit * (1 - pyomo_model.is_generating)
+            ),
+        )
 
         ##################################
         # SOC Inventory Constraints      #
@@ -483,14 +509,13 @@ class PyomoRuleStorageMinOperatingCosts:
         pyomo_model.port.add(pyomo_model.system_production)
         pyomo_model.port.add(pyomo_model.system_load)
         pyomo_model.port.add(pyomo_model.commodity_out)
+        pyomo_model.port.add(pyomo_model.commodity_bought)
         # pyomo_model.port.add(pyomo_model.electricity_purchased)
 
     # Update time series parameters for next optimization window
-    def update_time_series_parameters(self, start_time: int,
-                                      commodity_in:list,
-                                      commodity_demand:list
-                                    #   time_commodity_met_value:list
-                                      ):
+    def update_time_series_parameters(self, commodity_in: list, commodity_demand: list,
+                                commodity_met_value_in: list,
+                                commodity_buy_price_in: list):
         """Update time series parameters method.
 
         Args:
@@ -502,6 +527,17 @@ class PyomoRuleStorageMinOperatingCosts:
                                         for t in self.blocks.index_set()]
         self.load_production_limit = [commodity_demand[t]
                                         for t in self.blocks.index_set()]
+        self.commodity_met_value = [commodity_met_value_in[t]
+                                    for t in self.blocks.index_set()
+                                    ]
+        self.commodity_buy_price = [commodity_buy_price_in[t]
+                                    for t in self.blocks.index_set()
+                                    ]
+        # print("buy price", self.commodity_buy_price)
+        # print(self.load_production_limit)
+        # print("load demand", self.commodity_load_demand)
+        # print("met value", self.commodity_met_value)
+        
         # TODO: add back in if needed, needed for variable time series pricing
         # self.commodity_met_value = [time_commodity_met_value[t]
         #                                 for t in self.blocks.index_set()]
@@ -524,11 +560,9 @@ class PyomoRuleStorageMinOperatingCosts:
                             + (self.blocks[t].commodity_load_demand
                             - hybrid_blocks[t].commodity_out
                                 ) * self.blocks[t].commodity_met_value
-
-            #                                 + (
-            #     * self.blocks[t].electricity_purchase_price
-            #     * hybrid_blocks[t].electricity_purchased
-            # )
+                            + (hybrid_blocks[t].commodity_bought
+                                * self.blocks[t].commodity_buy_price)
+                            # + (self.blocks[t].epsilon * self.blocks[t].is_generating)
                         )
                         # Try to incentivize battery charging
                         for t in self.blocks.index_set()
@@ -551,6 +585,7 @@ class PyomoRuleStorageMinOperatingCosts:
                 "commodity_out": hybrid_model.commodity_out,
                 "charge_commodity": hybrid_model.charge_commodity,
                 "discharge_commodity": hybrid_model.discharge_commodity,
+                "commodity_bought": hybrid_model.commodity_bought
             }
         )
         )
@@ -569,17 +604,30 @@ class PyomoRuleStorageMinOperatingCosts:
         ##################################
         # TODO: fix the units on these
         hybrid_model.system_production = pyo.Var(
-            doc="System generation [MW]",
+            doc="System production ["
+            + self.commodity_storage_units
+            + "]",
             domain=pyo.NonNegativeReals,
             units=eval("pyo.units." + self.commodity_storage_units),
         )
         hybrid_model.system_load = pyo.Var(
-            doc="System load [MW]",
+            doc="System load ["
+            + self.commodity_storage_units
+            + "]",
             domain=pyo.NonNegativeReals,
             units=eval("pyo.units." + self.commodity_storage_units),
         )
         hybrid_model.commodity_out = pyo.Var(
-            doc="Electricity sold [MW]",
+            doc="Commodity out ["
+            + self.commodity_storage_units
+            + "]",
+            domain=pyo.NonNegativeReals,
+            units=eval("pyo.units." + self.commodity_storage_units),
+        )
+        hybrid_model.commodity_bought = pyo.Var(
+            doc="Commodity bought ["
+            + self.commodity_storage_units
+            + "]",
             domain=pyo.NonNegativeReals,
             units=eval("pyo.units." + self.commodity_storage_units),
         )
@@ -854,10 +902,34 @@ class PyomoRuleStorageMinOperatingCosts:
         ]
 
     @commodity_met_value.setter
-    def commodity_met_value(self, price_per_kwh: float):
-        for t in self.blocks.index_set():
-            self.blocks[t].commodity_met_value = round(price_per_kwh, self.round_digits)
+    def commodity_met_value(self, price_per_kwh: list):
+        if len(price_per_kwh) == len(self.blocks):
+            for t, price in zip(self.blocks, price_per_kwh):
+                self.blocks[t].commodity_met_value.set_value(
+                    round(price, self.round_digits)
+                )
+        else:
+            raise ValueError(
+                "'price_per_kwh' list must be the same length as time horizon"
+            )
 
+    @property
+    def commodity_buy_price(self) -> float:
+        return [
+            self.blocks[t].commodity_buy_price.value for t in self.blocks.index_set()
+        ]
+
+    @commodity_buy_price.setter
+    def commodity_buy_price(self, price_per_kwh: list):
+        if len(price_per_kwh) == len(self.blocks):
+            for t, price in zip(self.blocks, price_per_kwh):
+                self.blocks[t].commodity_buy_price.set_value(
+                    round(price, self.round_digits)
+                )
+        else:
+            raise ValueError(
+                "'price_per_kwh' list must be the same length as time horizon"
+            )
         ### The following method is if the value of meeting the demand is variable
         # if len(price_per_kwh) == len(self.blocks):
         #     for t, price in zip(self.blocks, price_per_kwh):
@@ -916,18 +988,8 @@ class PyomoRuleStorageMinOperatingCosts:
         return [self.blocks[t].commodity_out.value for t in self.blocks.index_set()]
 
     @property
-    def storage_commodity_out(self) -> list:
-        """Storage commodity out."""
-        return [
-            self.blocks[t].discharge_commodity.value - self.blocks[t].charge_commodity.value
-            for t in self.blocks.index_set()
-        ]
-
-    # @property
-    # def electricity_purchased(self) -> list:
-    #     return [
-    #         self.blocks[t].electricity_purchased.value for t in self.blocks.index_set()
-    #     ]
+    def commodity_bought(self) -> list:
+        return [self.blocks[t].commodity_bought.value for t in self.blocks.index_set()]
 
     @property
     def is_generating(self) -> list:

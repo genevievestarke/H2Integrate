@@ -249,6 +249,25 @@ class PySAMBatteryPerformanceModel(BatteryPerformanceBaseClass):
             desc="Power demand",
         )
 
+        # Add dispatch inputs here
+        # TODO: find a better way to do this
+        # if "use_grid_buying_dispatch" in self.options["plant_config"]:
+        self.add_input(
+            "demand_met_value_in",
+            val=0.0,
+            copy_shape="electricity_in",
+            units="USD/kW",
+            desc="Value of met demand for optimized dispatch",
+        )
+
+        self.add_input(
+            "electricity_buy_price_in",
+            val=0.0,
+            copy_shape="electricity_in",
+            units="USD/kW",
+            desc="Buy price for electricity to meet demand in optimized dispatch",
+        )
+
         self.add_output(
             "P_chargeable",
             val=0.0,
@@ -281,6 +300,13 @@ class PySAMBatteryPerformanceModel(BatteryPerformanceBaseClass):
             desc="Unused generated commodity",
         )
 
+        self.add_output(
+            "bought_electricity_out",
+            val=0.0,
+            copy_shape="electricity_in",
+            units="kW",
+            desc="Electricity bought to meet demand",
+        )
         # Initialize the PySAM BatteryStateful model with defaults
         self.system_model = BatteryStateful.default(self.config.chemistry)
 
@@ -378,7 +404,9 @@ class PySAMBatteryPerformanceModel(BatteryPerformanceBaseClass):
                 unmet_demand,
                 unused_commodity,
                 soc,
+                bought_commodity,
             ) = dispatch(self.simulate, kwargs, inputs)
+            outputs["bought_electricity_out"] = bought_commodity
 
         else:
             # Simulate the battery with provided inputs and no controller.
