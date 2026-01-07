@@ -109,7 +109,7 @@ class PyomoDispatchPlantRule:
 
     def _create_hybrid_constraints(self, hybrid, t):
         hybrid.production_total = pyo.Constraint(
-            doc="hybrid system generation total",
+            doc="hybrid system production total",
             rule=hybrid.system_production == sum(self.power_source_gen_vars[t]),
         )
 
@@ -150,8 +150,6 @@ class PyomoDispatchPlantRule:
                                                       commodity_met_value_in,
                                                       commodity_buy_price_in)
 
-        print(sum(self.power_source_gen_vars))
-        print(sum(self.load_vars))
 
     def create_min_operating_cost_expression(self):
         self._delete_objective()

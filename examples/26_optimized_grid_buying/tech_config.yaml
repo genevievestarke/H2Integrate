@@ -14,7 +14,7 @@ technologies:
       wind_speed: 9.
     model_inputs:
       performance_parameters:
-        num_turbines: 100
+        num_turbines: 10
         turbine_rating_kw: 8300
         rotor_diameter: 196.
         hub_height: 130.
@@ -61,10 +61,11 @@ technologies:
         charge_efficiency: 0.938
         discharge_efficiency: 0.938
         commodity_storage_units: "kW"
-        cost_per_charge: 0.05
-        cost_per_discharge: 0.1
-        commodity_met_value: 2        
-        cost_per_production: 0.01
+        cost_per_charge: 0.002
+        cost_per_discharge: 0.003
+        commodity_met_value: 0.4        
+        cost_per_production: 0.001
+        max_system_capacity: 83000  # Match wind plant capacity, playing interconnect value. Could pull from grid instead.
       performance_parameters:
         system_model_source: "pysam"
         chemistry: "LFPGraphite"

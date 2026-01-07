@@ -7,9 +7,51 @@ from h2integrate.core.h2integrate_model import H2IntegrateModel
 # Create an H2Integrate model
 model = H2IntegrateModel("pyomo_heuristic_dispatch.yaml")
 
-demand_profile = np.ones(8760) * 50.0
+# --- Parameters ---
+amplitude = 1.0       # Amplitude of the sine wave
+frequency = 0.05       # Frequency of the sine wave in Hz
+duration = 8760.0        # Duration of the signal in seconds
+sampling_rate = 1   # Number of samples per second (Fs)
+
+# Noise parameters
+noise_mean = 0.0
+noise_std_dev = 0.1   # Standard deviation controls the noise intensity
+
+# --- Generate the Time Vector ---
+# Create a time array from 0 to duration with a specific sampling rate
+t = np.linspace(1.0, duration, int(sampling_rate * duration), endpoint=True)
+
+# --- Generate the Pure Sine Wave Signal ---
+# Formula: y(t) = A * sin(2 * pi * f * t)
+pure_signal = amplitude * np.sin(2.0 * np.pi * frequency * t)
+
+# --- Generate the Random Gaussian Noise ---
+# Create noise with the same shape as the time vector
+noise = np.random.normal(noise_mean, noise_std_dev, size=t.shape)
+
+# --- Create the Noisy Signal ---
+noisy_signal = (pure_signal + noise)*0.04 + 0.04*np.ones(len(t))
+
+# --- Plot the Results ---
+plt.figure(figsize=(10, 6))
+
+# Plot the pure signal and the noisy signal
+# plt.plot(t, pure_signal, label="Pure Sine Wave", color='green', linestyle='--')
+plt.plot(t, noisy_signal, label="Noisy Signal", color='red', alpha=0.6)
+
+plt.title("Sine Wave Signal with Gaussian Noise")
+plt.xlabel("Time (s)")
+plt.ylabel("Amplitude")
+plt.xlim(0, 200)
+plt.legend()
+plt.grid(True)
+# plt.show()
+
+demand_profile = np.ones(8760) * 60.0
 commodity_met_value_profile = np.ones(8760) * 1
-commodity_buy_price_profile = np.ones(8760) * 0.04
+# commodity_met_value_profile = noisy_signal
+# commodity_buy_price_profile = np.ones(8760) * 0.04
+commodity_buy_price_profile = noisy_signal
 
 
 # TODO: Update with demand module once it is developed
@@ -49,15 +91,16 @@ ax[1].plot(
     linestyle=":",
     label="Unused Electricity (MW)",
 )
+# ax[1].plot(
+#     range(start_hour, end_hour),
+#     model.prob.get_val("battery.unmet_electricity_demand_out", units="MW")[start_hour:end_hour],
+#     linestyle=":",
+#     label="Unmet Electrical Demand (MW)",
+# )
 ax[1].plot(
     range(start_hour, end_hour),
-    model.prob.get_val("battery.unmet_electricity_demand_out", units="MW")[start_hour:end_hour],
-    linestyle=":",
-    label="Unmet Electrical Demand (MW)",
-)
-ax[1].plot(
-    range(start_hour, end_hour),
-    model.prob.get_val("battery.electricity_out", units="MW")[start_hour:end_hour],
+    model.prob.get_val("battery.electricity_out", units="MW")[start_hour:end_hour]+
+    model.prob.get_val("battery.bought_electricity_out", units="MW")[start_hour:end_hour],
     linestyle="-",
     label="Electricity Out (MW)",
 )
@@ -73,14 +116,6 @@ ax[1].plot(
     model.prob.get_val("battery.bought_electricity_out", units="MW")[start_hour:end_hour],
     linestyle="-.",
     label="Grid Bought Electricity Out (MW)",
-)
-
-ax[1].plot(
-    range(start_hour, end_hour),
-    model.prob.get_val("battery.bought_electricity_out", units="MW")[start_hour:end_hour]+
-    model.prob.get_val("battery.electricity_out", units="MW")[start_hour:end_hour],
-    linestyle="-",
-    label="total Electricity Out (MW)",
 )
 
 ax[1].plot(

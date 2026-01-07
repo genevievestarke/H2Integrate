@@ -341,8 +341,8 @@ class PyomoControllerBaseClass(ControllerBaseClass):
                     unused_commodity[j] = np.maximum(
                         0, storage_commodity_out[j] + commodity_in[j - t] - demand_in[j - t]
                     )
-                    bought_commodity[j] = np.maximum(self.opt_bought_commodity[j-t], 0)
-
+                    bought_commodity[j] = unmet_demand[j]
+                    # bought_commodity[j] = np.maximum(self.opt_bought_commodity[j-t], 0)
 
             return total_commodity_out, storage_commodity_out, unmet_demand, unused_commodity,\
                     soc, bought_commodity
@@ -837,6 +837,7 @@ class OptimizedDispatchControllerConfig(PyomoControllerBaseConfig):
     cost_per_charge: float = field(default=None)
     cost_per_discharge: float = field(default=None)
     commodity_met_value: float = field(default=None)
+    max_system_capacity: float = field(default=None)
 
 class OptimizedDispatchController(SimpleBatteryControllerHeuristic):
     """Operates the battery based on heuristic rules to meet the demand profile based power
@@ -881,6 +882,7 @@ class OptimizedDispatchController(SimpleBatteryControllerHeuristic):
             "charge_efficiency": self.charge_efficiency,
             "discharge_efficiency": self.discharge_efficiency,
             "max_charge_rate": self.config.max_charge_rate,
+            "max_system_capacity": self.config.max_system_capacity,
         }
 
         self.n_control_window = self.config.n_control_window
