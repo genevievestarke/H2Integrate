@@ -14,7 +14,7 @@ technologies:
       wind_speed: 9.
     model_inputs:
       performance_parameters:
-        num_turbines: 10
+        num_turbines: 100
         turbine_rating_kw: 8300
         rotor_diameter: 196.
         hub_height: 130.
