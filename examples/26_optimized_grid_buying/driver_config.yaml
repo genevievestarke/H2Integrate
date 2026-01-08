@@ -3,3 +3,10 @@ description: "This analysis runs a hybrid plant to meet an electrical load."
 
 general:
   folder_output: outputs
+
+recorder:
+    file: cases.sql
+    overwrite_recorder: true
+    flag: true
+    includes: ['*']
+    excludes: ['*wind_resource*']
