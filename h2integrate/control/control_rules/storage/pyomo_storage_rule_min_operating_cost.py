@@ -84,6 +84,10 @@ class PyomoRuleStorageMinOperatingCosts:
                                     for t in self.blocks.index_set()
                                     ]
         self._set_initial_soc_constraint()
+        print("Initialized storage dispatch parameters.")
+        print("cost per charge:", self.cost_per_charge)
+        print("cost per discharge:", self.cost_per_discharge)
+        print("load demand:", self.commodity_load_demand)
 
 
     def dispatch_block_rule_function(self, pyomo_model: pyo.ConcreteModel, tech_name: str):

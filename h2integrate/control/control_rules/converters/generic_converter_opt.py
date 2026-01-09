@@ -51,6 +51,8 @@ class PyomoDispatchGenericConverterMinOperatingCosts:
         """
 
         self.cost_per_production = dispatch_inputs["cost_per_production"]
+        print("Initialized converter dispatch parameters.")
+        print("cost per production:", self.cost_per_production)
 
     def dispatch_block_rule_function(self, pyomo_model: pyo.ConcreteModel):
         """

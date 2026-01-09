@@ -185,6 +185,9 @@ class PyomoControllerBaseClass(ControllerBaseClass):
             else:
                 continue
 
+            print("Dispatch Techs:", self.dispatch_tech)
+            print("Source Techs:", self.source_techs)
+
         # define dispatch solver
         def pyomo_dispatch_solver(
             performance_model: callable,
@@ -324,6 +327,9 @@ class PyomoControllerBaseClass(ControllerBaseClass):
                     sim_start_index=t,
                 )
 
+                if "battery_2" in self.source_techs:
+                    print("Storage commanests:", self.storage_dispatch_commands)
+                
                 # get a list of all time indices belonging to the current control window
                 window_indices = list(range(t, t + self.config.n_control_window))
 
@@ -933,8 +939,14 @@ class OptimizedDispatchController(SimpleBatteryControllerHeuristic):
 
         """
 
-        # self.problem_state = DispatchProblemState()
         solver_results = self.glpk_solve()
+        # if "battery_2" in self.source_techs:
+        if start_time < 50:
+            # print("Hybrid Battery charge and discharge:", getattr(self.pyomo_model, "battery_2_rule").charge_commodity, \
+            #     getattr(self.pyomo_model, "battery_2_rule").discharge_commodity)
+            print("Battery charge and discharge:", self.hybrid_dispatch_rule.charge_commodity, self.hybrid_dispatch_rule.discharge_commodity)
+            print("solver resules:", solver_results)
+        # self.problem_state = DispatchProblemState()
         self.problem_state.store_problem_metrics(
             solver_results, start_time, n_days, pyomo.value(self.hybrid_dispatch_model.objective)
         )
