@@ -433,10 +433,17 @@ class PyomoRuleStorageMinOperatingCosts:
         pyomo_model.balance = pyo.Constraint(
             doc="Transmission energy balance",
             expr=(
-                pyomo_model.commodity_out - pyomo_model.commodity_bought
+                pyomo_model.commodity_out
                 == pyomo_model.system_production - pyomo_model.system_load
             ),
         )
+        # pyomo_model.balance = pyo.Constraint(
+        #     doc="Transmission energy balance",
+        #     expr=(
+        #         pyomo_model.commodity_out - pyomo_model.commodity_bought
+        #         == pyomo_model.system_production - pyomo_model.system_load
+        #     ),
+        # )        
         pyomo_model.production_limit = pyo.Constraint(
             doc="Transmission limit on commodity sales",
             expr=pyomo_model.commodity_out
@@ -568,7 +575,7 @@ class PyomoRuleStorageMinOperatingCosts:
                             self.blocks[t].cost_per_discharge * hybrid_blocks[t].discharge_commodity
                             - self.blocks[t].cost_per_charge * hybrid_blocks[t].charge_commodity
                             + (self.blocks[t].commodity_load_demand
-                            - hybrid_blocks[t].commodity_out
+                            - (hybrid_blocks[t].commodity_out + hybrid_blocks[t].commodity_bought)
                                 ) * self.blocks[t].commodity_met_value
                             + (hybrid_blocks[t].commodity_bought
                                 * self.blocks[t].commodity_buy_price)

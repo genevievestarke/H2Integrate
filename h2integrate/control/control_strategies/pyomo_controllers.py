@@ -259,21 +259,49 @@ class PyomoControllerBaseClass(ControllerBaseClass):
 
             control_strategy = self.options["tech_config"]["control_strategy"]["model"]
 
-            # TODO: implement optional kwargs for this method
-            if "optimized" in control_strategy:
-                self.initialize_parameters(inputs[f"{commodity_name}_in"],
+            # commodity_in should always be positive. Any negative values (e.g. battery charging
+            # from grid) should be represented in commodity_demand
+            commodity_in_full = [max(0, x) for x in inputs[f"{commodity_name}_in"]]
+
+            # TODO: implement optional kwargs for this method: maybe this will remove if statement here
+            if "heuristic" in control_strategy:
+                # Initialize parameters for heruistic dispatch strategy
+                self.initialize_parameters()
+            elif "optimized" in control_strategy:
+                # Initialize parameters for optimized dispatch strategy
+                # Note this is acutally grid initialization. Just optimized would be
+            #     self.initialize_parameters(inputs[f"{commodity_name}_in"],
+            #                            inputs[f"{commodity_name}_demand"])
+                self.initialize_parameters(commodity_in_full,
                                        inputs[f"{commodity_name}_demand"],
                                        inputs["demand_met_value_in"],
                                        inputs[f"{commodity_name}_buy_price_in"])
+
             else:
-                self.initialize_parameters(inputs[f"{commodity_name}_in"],
-                                       inputs[f"{commodity_name}_demand"])
+                raise (
+                    NotImplementedError(
+                        f"Control strategy '{control_strategy}' was given, \
+                        but has not been implemented yet."
+                    )
+                )
+            # # TODO: implement optional kwargs for this method
+            # if "optimized" in control_strategy:
+            #     self.initialize_parameters(inputs[f"{commodity_name}_in"],
+            #                            inputs[f"{commodity_name}_demand"],
+            #                            inputs["demand_met_value_in"],
+            #                            inputs[f"{commodity_name}_buy_price_in"])
+            # else:
+            #     self.initialize_parameters(inputs[f"{commodity_name}_in"],
+            #                            inputs[f"{commodity_name}_demand"])
 
             # loop over all control windows, where t is the starting index of each window
             for t in window_start_indices:
                 print("Iteration tracker:", t)
                 # get the inputs over the current control window
-                commodity_in = inputs[self.config.commodity_name + "_in"][
+                # commodity_in = inputs[self.config.commodity_name + "_in"][
+                #     t : t + self.config.n_control_window
+                # ]
+                commodity_in = commodity_in_full[
                     t : t + self.config.n_control_window
                 ]
                 demand_in = inputs[f"{commodity_name}_demand"][t : t + self.config.n_control_window]
@@ -720,30 +748,6 @@ class SimpleBatteryControllerHeuristic(PyomoControllerBaseClass):
             self.blocks[t].maximum_soc = round(maximum_soc, self.round_digits)
 
     # @property
-    # def charge_efficiency(self) -> float:
-    #     """Charge efficiency."""
-    #     for t in self.blocks.index_set():
-    #         return self.blocks[t].charge_efficiency.value
-
-    # @charge_efficiency.setter
-    # def charge_efficiency(self, efficiency: float):
-    #     efficiency = self._check_efficiency_value(efficiency)
-    #     for t in self.blocks.index_set():
-    #         self.blocks[t].charge_efficiency = round(efficiency, self.round_digits)
-
-    # @property
-    # def discharge_efficiency(self) -> float:
-    #     """Discharge efficiency."""
-    #     for t in self.blocks.index_set():
-    #         return self.blocks[t].discharge_efficiency.value
-
-    # @discharge_efficiency.setter
-    # def discharge_efficiency(self, efficiency: float):
-    #     efficiency = self._check_efficiency_value(efficiency)
-    #     for t in self.blocks.index_set():
-    #         self.blocks[t].discharge_efficiency = round(efficiency, self.round_digits)
-
-    # @property
     # def round_trip_efficiency(self) -> float:
     #     """Round trip efficiency."""
     #     return self.charge_efficiency * self.discharge_efficiency
@@ -829,6 +833,31 @@ class HeuristicLoadFollowingController(SimpleBatteryControllerHeuristic):
                     fd = -self.max_charge_fraction[t]
             self._fixed_dispatch[t] = fd
 
+    @property
+    def charge_efficiency(self) -> float:
+        """Charge efficiency."""
+        for t in self.blocks.index_set():
+            return self.blocks[t].charge_efficiency.value
+
+    @charge_efficiency.setter
+    def charge_efficiency(self, efficiency: float):
+        efficiency = self._check_efficiency_value(efficiency)
+        for t in self.blocks.index_set():
+            self.blocks[t].charge_efficiency = round(efficiency, self.round_digits)
+
+    @property
+    def discharge_efficiency(self) -> float:
+        """Discharge efficiency."""
+        for t in self.blocks.index_set():
+            return self.blocks[t].discharge_efficiency.value
+
+    @discharge_efficiency.setter
+    def discharge_efficiency(self, efficiency: float):
+        efficiency = self._check_efficiency_value(efficiency)
+        for t in self.blocks.index_set():
+            self.blocks[t].discharge_efficiency = round(efficiency, self.round_digits)
+
+
 
 @define
 class OptimizedDispatchControllerConfig(PyomoControllerBaseConfig):
@@ -845,7 +874,7 @@ class OptimizedDispatchControllerConfig(PyomoControllerBaseConfig):
     commodity_met_value: float = field(default=None)
     max_system_capacity: float = field(default=None)
 
-class OptimizedDispatchController(SimpleBatteryControllerHeuristic):
+class OptimizedDispatchController(PyomoControllerBaseClass):
     """Operates the battery based on heuristic rules to meet the demand profile based power
         available from power generation profiles and power demand profile.
 
@@ -899,6 +928,8 @@ class OptimizedDispatchController(SimpleBatteryControllerHeuristic):
     def initialize_parameters(self, commodity_in, commodity_demand,
                               commodity_met_value_in,
                               commodity_buy_price_in):
+        print("commodity demand:", commodity_demand[0:48])
+        print("commodity in:", commodity_in[0:48])
         self.hybrid_dispatch_model = self._create_dispatch_optimization_model()
         self.hybrid_dispatch_rule.create_min_operating_cost_expression()
         self.hybrid_dispatch_rule.create_arcs()
