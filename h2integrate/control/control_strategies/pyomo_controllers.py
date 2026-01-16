@@ -261,6 +261,8 @@ class PyomoControllerBaseClass(ControllerBaseClass):
 
             # commodity_in should always be positive. Any negative values (e.g. battery charging
             # from grid) should be represented in commodity_demand
+
+            # TODO: make sure this actually comes into commodity demand
             commodity_in_full = [max(0, x) for x in inputs[f"{commodity_name}_in"]]
 
             # TODO: implement optional kwargs for this method: maybe this will remove if statement here
@@ -354,9 +356,6 @@ class PyomoControllerBaseClass(ControllerBaseClass):
                     **performance_model_kwargs,
                     sim_start_index=t,
                 )
-
-                if "battery_2" in self.source_techs:
-                    print("Storage commanests:", self.storage_dispatch_commands)
                 
                 # get a list of all time indices belonging to the current control window
                 window_indices = list(range(t, t + self.config.n_control_window))
@@ -367,17 +366,28 @@ class PyomoControllerBaseClass(ControllerBaseClass):
                     # simulation
                     # TODO: connect soc properly over multiple windows
                     storage_commodity_out[j] = storage_commodity_out_control_window[j - t]
+
                     soc[j] = soc_control_window[j - t]
+                    # total_commodity_out[j] = np.minimum(
+                    #     demand_in[j - t], storage_commodity_out[j] + commodity_in[j - t]
+                    # )
                     total_commodity_out[j] = np.minimum(
-                        demand_in[j - t], storage_commodity_out[j] + commodity_in[j - t]
+                        demand_in[j - t], np.maximum(0, storage_commodity_out[j] + commodity_in[j - t])
                     )
-                    unmet_demand[j] = np.maximum(0, demand_in[j - t] - total_commodity_out[j])
+                    unmet_demand[j] = np.maximum(0, demand_in[j - t] - min(0, storage_commodity_out[j] + commodity_in[j - t]))
+                    # print("unmet demand", unmet_demand[j])
                     unused_commodity[j] = np.maximum(
                         0, storage_commodity_out[j] + commodity_in[j - t] - demand_in[j - t]
                     )
-                    bought_commodity[j] = unmet_demand[j]
+                    bought_commodity[j] = np.maximum(0, demand_in[j - t] -(storage_commodity_out[j] + commodity_in[j - t]))
                     # bought_commodity[j] = np.maximum(self.opt_bought_commodity[j-t], 0)
 
+                # print("Storage commands", self.storage_dispatch_commands)
+                # print("Battery performance", storage_commodity_out_control_window)
+                # print("Total out", total_commodity_out[t : t + self.config.n_control_window])
+                # print("Commodity in", commodity_in)
+                # print("Unmet demand", unmet_demand[t : t + self.config.n_control_window])
+                # jkjk
             return total_commodity_out, storage_commodity_out, unmet_demand, unused_commodity,\
                     soc, bought_commodity
 
