@@ -1,6 +1,6 @@
 import pyomo.environ as pyo
-from pyomo.network import Port, Arc
-from attrs import field, define
+from pyomo.network import Arc
+
 
 # from h2integrate.control.control_rules.pyomo_rule_baseclass import PyomoRuleBaseClass
 
@@ -33,7 +33,6 @@ class PyomoDispatchPlantRule:
         #     self.options["tech_config"]["model_inputs"]["dispatch_rule_parameters"]
         # )
 
-
         self.source_techs = source_techs
         self.options = dispatch_options
         self.power_source_gen_vars = {key: [] for key in index_set}
@@ -43,14 +42,11 @@ class PyomoDispatchPlantRule:
         self.arcs = []
 
         self.block_set_name = block_set_name
-        self.round_digits = int(4)
-
-
+        self.round_digits = 4
 
         self._model = pyomo_model
         self._blocks = pyo.Block(index_set, rule=self.dispatch_block_rule)
         setattr(self.model, self.block_set_name, self.blocks)
-
 
     def dispatch_block_rule(self, hybrid, t):
         ##################################
@@ -66,36 +62,36 @@ class PyomoDispatchPlantRule:
         ##################################
         self._create_hybrid_constraints(hybrid, t)
 
-
-    def initialize_parameters(self, commodity_in: list, commodity_demand: list,
-                              commodity_met_value_in: list,
-                              commodity_buy_price_in: list,
-                              dispatch_params:dict):
+    def initialize_parameters(
+        self,
+        commodity_in: list,
+        commodity_demand: list,
+        commodity_met_value_in: list,
+        commodity_buy_price_in: list,
+        dispatch_params: dict,
+    ):
         """Initialize parameters method."""
-        self.time_weighting_factor = (
-            self.options.time_weighting_factor
-        )  # Discount factor
+        self.time_weighting_factor = self.options.time_weighting_factor  # Discount factor
         for tech in self.source_techs:
-            name = tech+"_rule"
+            name = tech + "_rule"
             pyomo_block = getattr(self.tech_dispatch_models, name)
-            pyomo_block.initialize_parameters(commodity_in, commodity_demand,
-                                              commodity_met_value_in,
-                                              commodity_buy_price_in,
-                                              dispatch_params)
+            pyomo_block.initialize_parameters(
+                commodity_in,
+                commodity_demand,
+                commodity_met_value_in,
+                commodity_buy_price_in,
+                dispatch_params,
+            )
 
     def _create_variables_and_ports(self, hybrid, t):
-
         for tech in self.source_techs:
-            name = tech+"_rule"
+            name = tech + "_rule"
             pyomo_block = getattr(self.tech_dispatch_models, name)
             gen_var, load_var = pyomo_block._create_hybrid_variables(hybrid, name)
 
             self.power_source_gen_vars[t].append(gen_var)
             self.load_vars[t].append(load_var)
-            self.ports[t].append(
-                pyomo_block._create_hybrid_port(hybrid, name)
-            )
-
+            self.ports[t].append(pyomo_block._create_hybrid_port(hybrid, name))
 
     @staticmethod
     def _create_parameters(hybrid):
@@ -123,8 +119,9 @@ class PyomoDispatchPlantRule:
         # Arcs                           #
         ##################################
         for tech in self.source_techs:
-            name = tech+"_rule"
+            name = tech + "_rule"
             pyomo_block = getattr(self.tech_dispatch_models, name)
+
             def arc_rule(m, t):
                 source_port = pyomo_block.blocks[t].port
                 destination_port = getattr(self.blocks[t], name + "_port")
@@ -139,17 +136,24 @@ class PyomoDispatchPlantRule:
 
         pyo.TransformationFactory("network.expand_arcs").apply_to(self.model)
 
-    def update_time_series_parameters(self, commodity_in: list, commodity_demand: list,
-                                commodity_met_value_in: list,
-                                commodity_buy_price_in: list):
+    def update_time_series_parameters(
+        self,
+        commodity_in: list,
+        commodity_demand: list,
+        commodity_met_value_in: list,
+        commodity_buy_price_in: list,
+        updated_initial_soc: float,
+    ):
         for tech in self.source_techs:
-            name = tech+"_rule"
+            name = tech + "_rule"
             pyomo_block = getattr(self.tech_dispatch_models, name)
-            pyomo_block.update_time_series_parameters(commodity_in,
-                                                      commodity_demand,
-                                                      commodity_met_value_in,
-                                                      commodity_buy_price_in)
-
+            pyomo_block.update_time_series_parameters(
+                commodity_in,
+                commodity_demand,
+                commodity_met_value_in,
+                commodity_buy_price_in,
+                updated_initial_soc,
+            )
 
     def create_min_operating_cost_expression(self):
         self._delete_objective()
@@ -157,7 +161,7 @@ class PyomoDispatchPlantRule:
         def operationg_cost_objective_rule(m) -> float:
             obj = 0.0
             for tech in self.source_techs:
-                name = tech+"_rule"
+                name = tech + "_rule"
                 print("Obj function", name)
                 # Create the min_operating_cost expression for each technology
                 pyomo_block = getattr(self.tech_dispatch_models, name)
@@ -190,15 +194,11 @@ class PyomoDispatchPlantRule:
     @time_weighting_factor.setter
     def time_weighting_factor(self, weighting: float):
         for t in self.blocks.index_set():
-            self.blocks[t].time_weighting_factor = round(
-                weighting**t, self.round_digits
-            )
+            self.blocks[t].time_weighting_factor = round(weighting**t, self.round_digits)
 
     @property
     def time_weighting_factor_list(self) -> list:
-        return [
-            self.blocks[t].time_weighting_factor.value for t in self.blocks.index_set()
-        ]
+        return [self.blocks[t].time_weighting_factor.value for t in self.blocks.index_set()]
 
     # Outputs
     @property
@@ -248,10 +248,7 @@ class PyomoDispatchPlantRule:
     @property
     def commodity_bought(self) -> list:
         """Storage commodity bought."""
-        return [
-            self.blocks[t].commodity_bought.value for t in self.blocks.index_set()
-        ]
-
+        return [self.blocks[t].commodity_bought.value for t in self.blocks.index_set()]
 
     @property
     def storage_commodity_out(self) -> list:
