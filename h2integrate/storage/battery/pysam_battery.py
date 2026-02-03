@@ -455,6 +455,7 @@ class PySAMBatteryPerformanceModel(BatteryPerformanceBaseClass):
         outputs["SOC"] = soc
         outputs["P_chargeable"] = self.outputs.P_chargeable
         outputs["P_dischargeable"] = self.outputs.P_dischargeable
+        print("ELECTRICITY DEMAND OUT FROM BATTERY", outputs["unmet_electricity_demand_out"][0:250])
 
     def simulate(
         self,

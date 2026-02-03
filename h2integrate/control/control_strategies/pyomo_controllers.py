@@ -334,6 +334,7 @@ class PyomoControllerBaseClass(ControllerBaseClass):
                         commodity_demand=demand_in,
                         commodity_met_value_in=demand_met_value_in,
                         commodity_buy_price_in=commodity_buy_price_in,
+                        updated_initial_soc=self.updated_initial_soc,
                     )
                     # Run dispatch optimzation to minimize costs while meeting demand
                     self.solve_dispatch_model(
@@ -381,7 +382,7 @@ class PyomoControllerBaseClass(ControllerBaseClass):
                         np.maximum(0, storage_commodity_out[j] + commodity_in[j - t]),
                     )
                     unmet_demand[j] = np.maximum(
-                        0, demand_in[j - t] - min(0, storage_commodity_out[j] + commodity_in[j - t])
+                        0, demand_in[j - t] - (storage_commodity_out[j] + commodity_in[j - t])
                     )
                     # print("unmet demand", unmet_demand[j])
                     unused_commodity[j] = np.maximum(
@@ -948,6 +949,7 @@ class OptimizedDispatchController(PyomoControllerBaseClass):
 
         self.n_control_window = self.config.n_control_window
         self.n_horizon_window = self.config.n_control_window
+        self.updated_initial_soc = self.config.init_charge_percent
 
     # Initialize parameters for optimization model
     def initialize_parameters(

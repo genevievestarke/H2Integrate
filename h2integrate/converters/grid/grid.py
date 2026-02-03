@@ -114,6 +114,8 @@ class GridPerformanceModel(om.ExplicitComponent):
         )
 
     def compute(self, inputs, outputs):
+        print("ELECTRICITY DEMAND IN TO GRID", inputs["electricity_demand"][0:250])
+
         interconnection_size = inputs["interconnection_size"]
 
         # Selling: electricity flows into grid, limited by interconnection size
@@ -129,6 +131,7 @@ class GridPerformanceModel(om.ExplicitComponent):
 
         # Not sold electricity if demand exceeds interconnection size
         outputs["electricity_excess"] = inputs["electricity_in"] - electricity_sold
+        print("ELECTRICITY BOUGHT FROM GRID", outputs["electricity_out"][0:250])
 
 
 @define
