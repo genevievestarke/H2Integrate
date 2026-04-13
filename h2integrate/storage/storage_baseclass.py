@@ -181,7 +181,7 @@ class StoragePerformanceBase(PerformanceModelBaseClass):
             for _source_tech, intended_dispatch_tech in self.options["plant_config"][
                 "tech_to_dispatch_connections"
             ]:
-                if any(intended_dispatch_tech in name for name in self.tech_group_name):
+                if any(intended_dispatch_tech == name for name in self.tech_group_name):
                     self.add_discrete_input("pyomo_dispatch_solver", val=lambda: None)
                     # set the using feedback control variable to True
                     using_feedback_control = True
@@ -269,6 +269,7 @@ class StoragePerformanceBase(PerformanceModelBaseClass):
                 "charge_rate": charge_rate,
                 "discharge_rate": discharge_rate,
                 "storage_capacity": storage_capacity,
+                "commodity_available": inputs[f"{self.commodity}_in"],
             }
             storage_commodity_out, soc = dispatch(self.simulate, kwargs, inputs)
 
@@ -278,6 +279,7 @@ class StoragePerformanceBase(PerformanceModelBaseClass):
                 charge_rate=charge_rate,
                 discharge_rate=discharge_rate,
                 storage_capacity=storage_capacity,
+                commodity_available=inputs[f"{self.commodity}_in"],
             )
 
         # determine storage charge and discharge
@@ -342,6 +344,7 @@ class StoragePerformanceBase(PerformanceModelBaseClass):
         charge_rate: float,
         discharge_rate: float,
         storage_capacity: float,
+        commodity_available: list | np.ndarray,
         sim_start_index: int = 0,
     ):
         """Run the storage model over a control window of ``n_control_window`` timesteps.
@@ -422,11 +425,17 @@ class StoragePerformanceBase(PerformanceModelBaseClass):
                 # expressed as a rate (commodity_rate_units).
                 headroom = (soc_max - soc) * storage_capacity / self.dt_hr
 
+                # how much we can charge based on the available input commodity
+                charge_available = commodity_available[sim_start_index + t]
+
                 # Clip to the most restrictive limit, then apply efficiency.
                 # max(0, ...) guards against negative headroom when SOC
                 # slightly exceeds soc_max.
                 # correct headroom to not include charge_eff.
-                actual_charge = max(0.0, min(headroom / charge_eff, charge_rate, -cmd)) * charge_eff
+                actual_charge = (
+                    max(0.0, min(headroom / charge_eff, charge_rate, -cmd, charge_available))
+                    * charge_eff
+                )
 
                 # Update SOC (actual_charge is in post-efficiency units)
                 soc += actual_charge / storage_capacity

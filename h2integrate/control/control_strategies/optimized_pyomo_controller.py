@@ -175,7 +175,8 @@ class OptimizedDispatchController(PyomoControllerBaseClass):
             "demand_met_value",
             val=self.config.demand_met_value,
             shape=self.n_timesteps,
-            units="USD/" + self.config.commodity_rate_units,
+            units=f"USD/({self.config.commodity_rate_units})",
+            # should these be USD/commodity_amount_units?
             desc="Value of meeting the demand",
         )
 
@@ -184,7 +185,8 @@ class OptimizedDispatchController(PyomoControllerBaseClass):
                 f"{self.config.commodity}_buy_price",
                 val=self.config.commodity_buy_price,
                 shape=self.n_timesteps,
-                units="USD/" + self.config.commodity_rate_units,
+                units=f"USD/({self.config.commodity_rate_units})",
+                # should these be USD/commodity_amount_units?
                 desc="Value of meeting the demand",
             )
             self.add_input(
@@ -205,7 +207,7 @@ class OptimizedDispatchController(PyomoControllerBaseClass):
             "controller_estimated_SOC",
             val=0,
             shape=self.n_timesteps,
-            units=self.config.commodity_rate_units,
+            units="percent",
         )
 
         self.add_output(
@@ -371,7 +373,9 @@ class OptimizedDispatchController(PyomoControllerBaseClass):
                         ]
 
             if self.config.allow_commodity_buying:
-                outputs[f"{self.config.commodity}_bought_for_storage"] = commodity_bought
+                outputs[f"{self.config.commodity}_bought_for_storage"] = np.clip(
+                    commodity_bought, a_min=0, a_max=None
+                )
             # Note that this SOC is from the performance model and not the
             #   controller's internal SOC variable
             outputs["controller_estimated_SOC"] = soc
