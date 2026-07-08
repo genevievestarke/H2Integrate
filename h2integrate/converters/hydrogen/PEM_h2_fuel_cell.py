@@ -68,6 +68,7 @@ def calc_current(system_power_reference, cell_area, n_cells, n_stacks):
 
     stack_current_density = J_P_curve(power_per_stack)  # convert to kW for the curve
     stack_current = stack_current_density * cell_area * n_cells  # in A
+    stack_current = np.clip(stack_current, a_min=0.0, a_max=None)  # clip negative values
 
     return stack_current, V_J_curve
 
