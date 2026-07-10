@@ -15,10 +15,13 @@ class GridPerformanceModelConfig(BaseConfig):
     """Configuration for the grid performance model.
 
     Attributes:
-        interconnection_size: Maximum power capacity for grid connection in kW
+        interconnection_size (int | float | list): Maximum power capacity for grid
+        connection in kW. Must be in the same units as `commodity_rate_units`.
+        May be a scalar for constant interconnection or a list/array for time-varying
+        interconnection value.
     """
 
-    interconnection_size: float = field()  # kW
+    interconnection_size: int | float | list = field()  # kW
 
 
 class GridPerformanceModel(PerformanceModelBaseClass):
@@ -71,6 +74,7 @@ class GridPerformanceModel(PerformanceModelBaseClass):
         self.add_input(
             "interconnection_size",
             val=self.config.interconnection_size,
+            shape=self.n_timesteps,
             units=self.commodity_rate_units,
             desc="Maximum power capacity for grid connection",
         )
@@ -147,13 +151,19 @@ class GridPerformanceModel(PerformanceModelBaseClass):
         outputs["electricity_excess"] = inputs["electricity_in"] - electricity_sold
 
         max_production = (
-            inputs["interconnection_size"] * len(outputs["electricity_out"]) * (self.dt / 3600)
+            np.max(inputs["interconnection_size"])
+            * len(outputs["electricity_out"])
+            * (self.dt / 3600)
         )
-        outputs["rated_electricity_production"] = inputs["interconnection_size"]
+        # What does rated production mean if interconnection size is time-varying? Use the
+        # max of the interconnection size over the simulation period.
+        outputs["rated_electricity_production"] = np.max(inputs["interconnection_size"]) * (
+            self.dt / 3600
+        )
         outputs["total_electricity_produced"] = np.sum(outputs["electricity_out"]) * (
             self.dt / 3600
         )
-        outputs["capacity_factor"] = outputs["total_electricity_produced"].sum() / max_production
+        outputs["capacity_factor"] = outputs["total_electricity_produced"] / max_production
         outputs["annual_electricity_produced"] = outputs["total_electricity_produced"] * (
             1 / self.fraction_of_year_simulated
         )
@@ -177,7 +187,7 @@ class GridCostModelConfig(CostModelBaseConfig):
         electricity_sell_price: Price to sell electricity to grid ($/kWh), optional
     """
 
-    interconnection_size: float = field()  # kW
+    interconnection_size: int | float | list = field()  # kW
     interconnection_capex_per_kw: float = field()  # $/kW
     interconnection_opex_per_kw: float = field()  # $/kW/year
     fixed_interconnection_cost: float = field()  # $
@@ -222,6 +232,7 @@ class GridCostModel(CostModelBaseClass):
         self.add_input(
             "interconnection_size",
             val=self.config.interconnection_size,
+            shape=self.n_timesteps,
             units="kW",
             desc="Interconnection capacity for cost calculation",
         )
@@ -305,16 +316,16 @@ class GridCostModel(CostModelBaseClass):
             )
 
     def compute(self, inputs, outputs, discrete_inputs, discrete_outputs):
-        interconnection_size = inputs["interconnection_size"]
+        max_interconnection_size = np.max(inputs["interconnection_size"])
 
         # Capital costs based on interconnection size
         capex_per_kw = self.config.interconnection_capex_per_kw
         fixed_cost = self.config.fixed_interconnection_cost
-        outputs["CapEx"] = (interconnection_size * capex_per_kw) + fixed_cost
+        outputs["CapEx"] = (max_interconnection_size * capex_per_kw) + fixed_cost
 
         # Fixed operating costs based on interconnection size
         opex_per_kw = self.config.interconnection_opex_per_kw
-        outputs["OpEx"] = interconnection_size * opex_per_kw
+        outputs["OpEx"] = max_interconnection_size * opex_per_kw
 
         # Variable operating costs (positive cost for buying, negative for selling)
         varopex = np.zeros(self.plant_life)

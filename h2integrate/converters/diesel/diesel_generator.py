@@ -130,10 +130,10 @@ class DieselGeneratorPerformanceModel(PerformanceModelBaseClass):
         """
 
         system_capacity = inputs["system_capacity_kw"]  # generator capacity in kW
-        heat_rate_gal_per_mwh = units.convert_units(
+        heat_rate_gal_per_kwh = units.convert_units(
             inputs["heat_rate_gal_per_mwh"], "galUS/(MW*h)", "galUS/(kW*h)"
         )  # Convert heat rate to gal/(kW*h) for consistency with kW units
-        max_diesel_consumption = system_capacity * heat_rate_gal_per_mwh
+        max_diesel_consumption = system_capacity * heat_rate_gal_per_kwh
 
         # electrical command value, saturated at rated system capacity
         electricity_command_value = np.where(
@@ -141,7 +141,7 @@ class DieselGeneratorPerformanceModel(PerformanceModelBaseClass):
             system_capacity,
             inputs["electricity_command_value"],
         )
-        diesel_demand = electricity_command_value * heat_rate_gal_per_mwh
+        diesel_demand = electricity_command_value * heat_rate_gal_per_kwh
 
         # available fuel, saturated at maximum system fuel consumption
         diesel_available = np.where(
@@ -154,7 +154,7 @@ class DieselGeneratorPerformanceModel(PerformanceModelBaseClass):
         diesel_consumed = np.minimum.reduce([diesel_demand, diesel_available])
 
         # Convert diesel consumption to electricity output using heat rate
-        electricity_out = diesel_consumed / heat_rate_gal_per_mwh
+        electricity_out = diesel_consumed / heat_rate_gal_per_kwh
 
         outputs["electricity_out"] = electricity_out
         outputs["diesel_consumed"] = diesel_consumed
