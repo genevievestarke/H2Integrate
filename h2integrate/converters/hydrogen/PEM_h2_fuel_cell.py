@@ -206,7 +206,7 @@ class PEMH2FuelCellPerformanceModel(PerformanceModelBaseClass):
         M_H2O = M_H2 + M_O2 / 2  # Molar mass of H2O in kg/mol
 
         # Sizing the cells
-        max_cell_power_density = 0.000334  # in kW
+        max_cell_power_density = 0.000334  # in W/cm^2
         stack_size = inputs["system_capacity"][0] / self.config.n_stacks
         cell_active_area = 400  # [cm^2] from Battelle (https://www.energy.gov/sites/prod/files/2018/02/f49/fcto_battelle_mfg_cost_analysis_1%20_to_25kw_pp_chp_fc_systems_jan2017_0.pdf)
         n_cells = round(stack_size / (cell_active_area * max_cell_power_density))
