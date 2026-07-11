@@ -298,6 +298,7 @@ class PEMH2FuelCellCostConfig(CostModelBaseConfig):
     capex_electrical_per_kw: float = field(validator=gte_zero)
     capex_assembly_per_kw: float = field(validator=gte_zero)
     capex_additional_labor_per_kw: float = field(validator=gte_zero)
+    capex_battery_total: float = field(validator=gte_zero)
     fixed_opex_per_kw_per_year: float = field(validator=gte_zero)
 
 
@@ -362,7 +363,9 @@ class PEMH2FuelCellCostModel(CostModelBaseClass):
         system_capacity_kw = inputs["system_capacity"]
 
         # Calculate capital cost
-        outputs["CapEx"] = system_capacity_kw * inputs["unit_capex"]
+        outputs["CapEx"] = (
+            system_capacity_kw * inputs["unit_capex"] + self.config.capex_battery_total
+        )
 
         # Calculate fixed operating cost per year
         outputs["OpEx"] = system_capacity_kw * inputs["fixed_opex_per_year"]

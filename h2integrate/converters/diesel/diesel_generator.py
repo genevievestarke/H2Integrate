@@ -193,6 +193,7 @@ class DieselGeneratorCostModelConfig(CostModelBaseConfig):
 
     system_capacity_kw: float | int = field(validator=gt_zero)
     capex_per_kw: float | int = field(validator=gte_zero)
+    capex_battery_total: float | int = field(validator=gte_zero)
     fixed_opex_per_kw_per_year: float | int = field(validator=gte_zero)
     variable_opex_per_kwh: float | int = field(validator=gte_zero)
 
@@ -277,7 +278,7 @@ class DieselGeneratorCostModel(CostModelBaseClass):
         delivered_electricity_kWdt = electricity_out.sum()
         delivered_electricity_kWh = delivered_electricity_kWdt * self.dt / 3600
 
-        capex = capex_per_kw * generator_capacity_kw
+        capex = capex_per_kw * generator_capacity_kw + self.config.capex_battery_total
         fixed_om = fixed_opex_per_kw_per_year * generator_capacity_kw
         variable_om = variable_opex_per_kwh * delivered_electricity_kWh
         opex = fixed_om + variable_om

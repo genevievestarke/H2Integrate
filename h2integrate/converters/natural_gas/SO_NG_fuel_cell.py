@@ -326,6 +326,7 @@ class SONGFuelCellCostConfig(CostModelBaseConfig):
     capex_bop_per_kw: float = field(validator=gte_zero)
     capex_indirect_costs_per_kw: float = field(validator=gte_zero)
     fixed_opex_per_kw_per_year: float = field(validator=gte_zero)
+    capex_battery_total: float = field(validator=gte_zero)
 
 
 class SONGFuelCellCostModel(CostModelBaseClass):
@@ -384,7 +385,9 @@ class SONGFuelCellCostModel(CostModelBaseClass):
         system_capacity_kw = inputs["system_capacity"]
 
         # Calculate capital cost
-        outputs["CapEx"] = system_capacity_kw * inputs["unit_capex"]
+        outputs["CapEx"] = (
+            system_capacity_kw * inputs["unit_capex"] + self.config.capex_battery_total
+        )
 
         # Calculate fixed operating cost per year
         outputs["OpEx"] = system_capacity_kw * inputs["fixed_opex_per_year"]
