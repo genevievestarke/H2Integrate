@@ -203,8 +203,8 @@ class FlorisWindPlantPerformanceModel(WindPerformanceBaseClass, CacheBaseClass):
             )
 
         time_series = TimeSeries(
-            wind_directions=winddir,
-            wind_speeds=windspeed,
+            wind_directions=winddir[: self.n_timesteps],
+            wind_speeds=windspeed[: self.n_timesteps],
             turbulence_intensities=ti,
         )
 
