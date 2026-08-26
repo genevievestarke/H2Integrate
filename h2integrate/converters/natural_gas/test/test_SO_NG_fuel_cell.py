@@ -3,10 +3,7 @@ import pytest
 import openmdao.api as om
 from pytest import fixture
 
-from h2integrate.converters.natural_gas.SO_NG_fuel_cell import (
-    SONGFuelCellCostModel,
-    SONGFuelCellPerformanceModel,
-)
+from h2integrate.converters.natural_gas.SO_NG_fuel_cell import SONGFuelCellPerformanceModel
 
 
 @fixture
@@ -31,23 +28,7 @@ def tech_config():
                 "system_capacity_kw": 1500.0,
                 "n_stacks": 60,
                 "stack_temperature_K": 1073.0,
-            }
-        }
-    }
-    return config
-
-
-@fixture
-def cost_config():
-    config = {
-        "model_inputs": {
-            "cost_parameters": {
-                "system_capacity_kw": 1500.0,
-                "capex_stack_per_kw": 500.0,
-                "capex_bop_per_kw": 1000,
-                "capex_indirect_costs_per_kw": 1500,
-                "fixed_opex_per_kw_per_year": 31.0,
-                "cost_year": 2026,
+                "hhv": 15.4,  # kWh/kg --> based on methane
             }
         }
     }
@@ -69,7 +50,7 @@ def test_fuel_cell_performance(tech_config, plant_config, subtests):
     prob.setup()
 
     # Provide ample natural gas and oxygen to run at the default command (rated capacity)
-    natural_gas_input = np.ones(n_timesteps) * 20.0  # MMBtu/h
+    natural_gas_input = np.ones(n_timesteps) * 10.0  # MMBtu/h
     oxygen_input = np.ones(n_timesteps) * 2000.0  # kg/h
 
     prob.set_val("fuel_cell.natural_gas_in", natural_gas_input, units="MMBtu/h")
@@ -125,7 +106,7 @@ def test_fuel_cell_performance(tech_config, plant_config, subtests):
             pytest.approx(
                 np.sum(prob.get_val("fuel_cell.natural_gas_consumed", units="MMBtu/h")), rel=1e-6
             )
-            == 807.926382702
+            == 216.00547288
         )
 
     with subtests.test("oxygen consumed"):
@@ -140,12 +121,42 @@ def test_fuel_cell_performance(tech_config, plant_config, subtests):
             == 20476.7060254
         )
 
-    with subtests.test("carbon dioxide out"):
+    with subtests.test("co2 out"):
+        assert (
+            pytest.approx(np.sum(prob.get_val("fuel_cell.co2_out", units="kg/h")), rel=1e-6)
+            == 12505.9649206
+        )
+
+    with subtests.test("rated natural gas consumed"):
         assert (
             pytest.approx(
-                np.sum(prob.get_val("fuel_cell.carbon_dioxide_out", units="kg/h")), rel=1e-6
+                prob.get_val("fuel_cell.rated_natural_gas_consumed", units="MMBtu/h"), rel=1e-6
             )
-            == 12505.9649206
+            == 7.2113556
+        )
+
+    with subtests.test("rated oxygen consumed"):
+        assert (
+            pytest.approx(prob.get_val("fuel_cell.rated_oxygen_consumed", units="kg/h"), rel=1e-6)
+            == 607.11480
+        )
+
+    with subtests.test("rated water out"):
+        assert (
+            pytest.approx(prob.get_val("fuel_cell.rated_water_out", units="kg/h"), rel=1e-6)
+            == 683.61604984
+        )
+
+    with subtests.test("rated co2 out"):
+        assert (
+            pytest.approx(prob.get_val("fuel_cell.rated_co2_out", units="kg/h"), rel=1e-6)
+            == 417.512383
+        )
+
+    with subtests.test("rated heat out"):
+        assert (
+            pytest.approx(prob.get_val("fuel_cell.rated_heat_out", units="kW"), rel=1e-6)
+            == 844.389934  # TODO: update expected value
         )
 
 
@@ -203,7 +214,7 @@ def test_fuel_cell_demand(tech_config, plant_config, subtests):
     ng_consumed = prob.get_val("fuel_cell.natural_gas_consumed", units="MMBtu/h")
     o2_consumed = prob.get_val("fuel_cell.oxygen_consumed", units="kg/h")
     water_out = prob.get_val("fuel_cell.water_out", units="kg/h")
-    co2_out = prob.get_val("fuel_cell.carbon_dioxide_out", units="kg/h")
+    co2_out = prob.get_val("fuel_cell.co2_out", units="kg/h")
 
     with subtests.test("output bounded by system capacity"):
         assert np.max(electricity_output) <= 1500.0 + 1e-6
@@ -254,11 +265,11 @@ def test_fuel_cell_demand(tech_config, plant_config, subtests):
         assert co2_out[5] == pytest.approx(0.0, abs=1e-6)
 
     with subtests.test("limited NG supply reduces electricity output and byproducts"):
-        assert electricity_output[6] == pytest.approx(79.43635323, rel=1e-2)
+        assert electricity_output[6] == pytest.approx(258.4037579, rel=1e-2)
         assert ng_consumed[6] == pytest.approx(1.0, rel=1e-2)
-        assert o2_consumed[6] == pytest.approx(22.509924, rel=1e-2)
-        assert water_out[6] == pytest.approx(25.323664, rel=1e-2)
-        assert co2_out[6] == pytest.approx(15.475572, rel=1e-2)
+        assert o2_consumed[6] == pytest.approx(84.18872, rel=1e-2)
+        assert water_out[6] == pytest.approx(94.7971630, rel=1e-2)
+        assert co2_out[6] == pytest.approx(57.8965188, rel=1e-2)
 
     with subtests.test("zero O2 supply collapses output to zero"):
         assert electricity_output[7] == pytest.approx(0.0, abs=1e-6)
@@ -266,37 +277,3 @@ def test_fuel_cell_demand(tech_config, plant_config, subtests):
         assert o2_consumed[7] == pytest.approx(0.0, abs=1e-6)
         assert water_out[7] == pytest.approx(0.0, abs=1e-6)
         assert co2_out[7] == pytest.approx(0.0, abs=1e-6)
-
-
-@pytest.mark.regression
-def test_fuel_cell_cost(cost_config, plant_config, subtests):
-    prob = om.Problem()
-
-    fuel_cell_cost = SONGFuelCellCostModel(
-        plant_config=plant_config, tech_config=cost_config, driver_config={}
-    )
-
-    prob.model.add_subsystem("fuel_cell_cost", fuel_cell_cost, promotes=["*"])
-
-    prob.setup()
-
-    prob.run_model()
-
-    cp = cost_config["model_inputs"]["cost_parameters"]
-    expected_unit_capex = (
-        cp["capex_stack_per_kw"] + cp["capex_bop_per_kw"] + cp["capex_indirect_costs_per_kw"]
-    )
-    expected_capex = cp["system_capacity_kw"] * expected_unit_capex
-    expected_opex = cp["system_capacity_kw"] * cp["fixed_opex_per_kw_per_year"]
-
-    with subtests.test("capex value"):
-        assert (
-            pytest.approx(prob.get_val("fuel_cell_cost.CapEx", units="USD"), rel=1e-6)
-            == expected_capex
-        )
-
-    with subtests.test("opex value"):
-        assert (
-            pytest.approx(prob.get_val("fuel_cell_cost.OpEx", units="USD/year"), rel=1e-6)
-            == expected_opex
-        )

@@ -3,10 +3,7 @@ import pytest
 import openmdao.api as om
 from pytest import fixture
 
-from h2integrate.converters.hydrogen.PEM_h2_fuel_cell import (
-    PEMH2FuelCellCostModel,
-    PEMH2FuelCellPerformanceModel,
-)
+from h2integrate.converters.hydrogen.PEM_h2_fuel_cell import PEMH2FuelCellPerformanceModel
 
 
 @fixture
@@ -31,28 +28,7 @@ def tech_config():
                 "system_capacity_kw": 1500.0,
                 "n_stacks": 60,
                 "stack_temperature_K": 278.0,
-            }
-        }
-    }
-    return config
-
-
-@fixture
-def cost_config():
-    config = {
-        "model_inputs": {
-            "cost_parameters": {
-                "system_capacity_kw": 1500.0,
-                "capex_stack_per_kw": 800.0,
-                "capex_hydrogen_supply_per_kw": 140.67,
-                "capex_air_supply_per_kw": 138.79,
-                "capex_cooling_per_kw": 64.14,
-                "capex_controls_instrumentation_per_kw": 106.52,
-                "capex_electrical_per_kw": 447.83,
-                "capex_assembly_per_kw": 63.51,
-                "capex_additional_labor_per_kw": 137.96,
-                "fixed_opex_per_kw_per_year": 31.0,
-                "cost_year": 2026,
+                "hhv": 39.4,  # kWh/kg
             }
         }
     }
@@ -155,6 +131,30 @@ def test_fuel_cell_performance(tech_config, plant_config, subtests):
             == 20476.70602546
         )
 
+    with subtests.test("rated h2 consumed"):
+        assert (
+            pytest.approx(prob.get_val("fuel_cell.rated_h2_consumed", units="kg/h"), rel=1e-6)
+            == 76.5012465
+        )
+
+    with subtests.test("rated o2 consumed"):
+        assert (
+            pytest.approx(prob.get_val("fuel_cell.rated_o2_consumed", units="kg/h"), rel=1e-6)
+            == 607.11480
+        )
+
+    with subtests.test("rated water out"):
+        assert (
+            pytest.approx(prob.get_val("fuel_cell.rated_water_out", units="kg/h"), rel=1e-6)
+            == 683.6160498
+        )
+
+    with subtests.test("rated heat out"):
+        assert (
+            pytest.approx(prob.get_val("fuel_cell.rated_heat_out", units="kW"), rel=1e-6)
+            == 1515.1571138
+        )
+
 
 @pytest.mark.unit
 def test_fuel_cell_demand(tech_config, plant_config, subtests):
@@ -247,44 +247,3 @@ def test_fuel_cell_demand(tech_config, plant_config, subtests):
     with subtests.test("water out"):
         expected_water_out = [683.61605, 204.817867, 683.61605, 0.0, 8.936012, 0.0]
         np.testing.assert_allclose(water_out[:6], expected_water_out, rtol=1e-4)
-
-
-@pytest.mark.regression
-def test_fuel_cell_cost(cost_config, plant_config, subtests):
-    prob = om.Problem()
-
-    fuel_cell_cost = PEMH2FuelCellCostModel(
-        plant_config=plant_config, tech_config=cost_config, driver_config={}
-    )
-
-    prob.model.add_subsystem("fuel_cell_cost", fuel_cell_cost, promotes=["*"])
-
-    prob.setup()
-
-    prob.run_model()
-
-    cp = cost_config["model_inputs"]["cost_parameters"]
-    expected_unit_capex = (
-        cp["capex_stack_per_kw"]
-        + cp["capex_hydrogen_supply_per_kw"]
-        + cp["capex_air_supply_per_kw"]
-        + cp["capex_cooling_per_kw"]
-        + cp["capex_controls_instrumentation_per_kw"]
-        + cp["capex_electrical_per_kw"]
-        + cp["capex_assembly_per_kw"]
-        + cp["capex_additional_labor_per_kw"]
-    )
-    expected_capex = cp["system_capacity_kw"] * expected_unit_capex
-    expected_opex = cp["system_capacity_kw"] * cp["fixed_opex_per_kw_per_year"]
-
-    with subtests.test("capex value"):
-        assert (
-            pytest.approx(prob.get_val("fuel_cell_cost.CapEx", units="USD"), rel=1e-6)
-            == expected_capex
-        )
-
-    with subtests.test("opex value"):
-        assert (
-            pytest.approx(prob.get_val("fuel_cell_cost.OpEx", units="USD/year"), rel=1e-6)
-            == expected_opex
-        )
