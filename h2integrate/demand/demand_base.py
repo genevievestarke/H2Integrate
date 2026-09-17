@@ -43,7 +43,7 @@ class DemandComponentBase(PerformanceModelBaseClass):
     demand component behavior.
     """
 
-    _time_step_bounds = (3600, 3600)  # (min, max) time step lengths compatible with this model
+    _time_step_bounds = (300, 3600)  # (min, max) time step lengths compatible with this model
     _control_classifier = "demand"
 
     def setup(self):
@@ -103,21 +103,7 @@ class DemandComponentBase(PerformanceModelBaseClass):
             desc=f"Pass-through of {self.commodity} demand profile",
         )
 
-        self.add_output(
-            "percent_load_missed",
-            val=0.0,
-            units="percent",
-            desc="Scalar value; percent of total demand not met",
-        )
-
-        self.add_output(
-            "curtailment_percent",
-            val=0.0,
-            units="percent",
-            desc="Scalar value; percent of total generation that was curtailed",
-        )
-
-    def compute(self):
+    def compute():
         """This method must be implemented by subclasses to define the
         demand component.
 
@@ -130,9 +116,8 @@ class DemandComponentBase(PerformanceModelBaseClass):
         """Compute unmet demand, unused commodity, and converter output.
 
         This method compares the demand profile to the supplied commodity for
-        each timestep and assigns unmet demand, curtailed production, actual
-        delivered output, and summary percentages for missed load and
-        curtailment.
+        each timestep and assigns unmet demand, curtailed production, and
+        actual delivered output.
 
         Args:
             commodity_in (np.array): supplied commodity profile
@@ -143,14 +128,10 @@ class DemandComponentBase(PerformanceModelBaseClass):
                     * ``unmet_{commodity}_demand_out``: Unmet demand.
                     * ``unused_{commodity}_out``: Curtailed production.
                     * ``{commodity}_out``: Actual output delivered.
-                    * ``percent_load_missed``: Percent of total demand not met.
-                    * ``curtailment_percent``: Percent of total supplied
-                      commodity that is curtailed, i.e. not used to meet demand.
 
         Notes:
             All variables operate on a per-timestep basis and typically have
-            array shape ``(n_timesteps,)`` except ``percent_load_missed`` and
-            ``curtailment_percent``, which are scalar summary outputs.
+            array shape ``(n_timesteps,)``.
         """
 
         outputs[f"{self.commodity}_demand_out"] = commodity_demand
@@ -179,20 +160,5 @@ class DemandComponentBase(PerformanceModelBaseClass):
         )
 
         outputs["capacity_factor"] = outputs[f"{self.commodity}_out"].sum() / commodity_demand.sum()
-
-        total_demand = commodity_demand.sum()
-        total_gen = commodity_in.sum()
-        if total_demand > 0:
-            outputs["percent_load_missed"] = (
-                100.0 * outputs[f"unmet_{self.commodity}_demand_out"].sum() / total_demand
-            )
-        else:
-            outputs["percent_load_missed"] = 0.0
-        if total_gen > 0:
-            outputs["curtailment_percent"] = (
-                100.0 * outputs[f"unused_{self.commodity}_out"].sum() / total_gen
-            )
-        else:
-            outputs["curtailment_percent"] = 0.0
 
         return outputs
