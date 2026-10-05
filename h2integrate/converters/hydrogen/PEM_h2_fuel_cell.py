@@ -38,14 +38,11 @@ def calc_current(system_power_reference, cell_area, n_cells, n_stacks):
                 function to convert from current density to voltage
     """
     # Calculates the current and voltage from IV curve based on power reference
-    #   These current, voltage and power values are from the fuel cell data collected here: https://github.com/ECSIM/pem-dataset1
-    #   Using the data from the "Activation Test MEA Standard Protocol (Repeat)" case
-    J_curve = np.array([0.0356, 0.05413333, 0.0796, 0.11366667, 0.244, 0.454])  # in A/cm^2
-    voltage_curve = np.array([0.987, 0.936, 0.884, 0.838, 0.786, 0.736])  # in V
-    power_curve = (
-        np.array([35.16666667, 50.53333333, 70.33333333, 95.46666667, 191.66666667, 334.33333333])
-        / 1e3
-    )  # in W/cm^2
+    #   These current, voltage and power values are from this publication:
+    # https://www.researchgate.net/publication/215531634_A_DSP-Based_Dual_Loop_Digital_Controller_Design_and_Implementation_of_a_High_Power_Boost_Converter_for_Hybrid_Electric_Vehicles_Applications
+    J_curve = np.array([0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4])  # in A/cm^2
+    voltage_curve = np.array([0.89, 0.86, 0.82, 0.79, 0.75, 0.73, 0.69, 0.65])  # in V
+    power_curve = np.array([0.01, 0.02, 0.04, 0.08, 0.11, 0.15, 0.21, 0.26])  # in W/cm^2
 
     # Function to calculate voltage from current density
     V_coefs = np.polyfit(J_curve, voltage_curve, 5)
@@ -239,7 +236,7 @@ class PEMH2FuelCellPerformanceModel(PerformanceModelBaseClass):
         n_h2o = 2  # number of electrons transferred per mole of H2O
 
         # Sizing the cells
-        max_cell_power_density = 0.000334  # in kW/cm^2
+        max_cell_power_density = 0.00026  # in kW/cm^2
         stack_size = inputs["system_capacity"][0] / self.config.n_stacks
         cell_active_area = 400  # [cm^2] from Battelle (https://www.energy.gov/sites/prod/files/2018/02/f49/fcto_battelle_mfg_cost_analysis_1%20_to_25kw_pp_chp_fc_systems_jan2017_0.pdf)
         n_cells = round(stack_size / (cell_active_area * max_cell_power_density))
@@ -247,6 +244,7 @@ class PEMH2FuelCellPerformanceModel(PerformanceModelBaseClass):
         rated_power_production = (
             max_cell_power_density * n_cells * cell_active_area * self.config.n_stacks
         )
+        print(f"Rated power production: {rated_power_production} kW")
 
         # Calculate the rated outputs of the system
         rated_I_stack, _ = calc_current(
