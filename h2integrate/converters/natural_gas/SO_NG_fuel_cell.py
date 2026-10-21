@@ -43,9 +43,15 @@ def calc_current(system_power_reference, cell_area, n_cells, n_stacks):
     #   These current, voltage and power values are from https://doi.org/10.1016/j.apenergy.2018.06.138,
     # Cut off at the maximum current density of 0.4 A/cm^2 (Battelle source)
 
-    J_curve = np.array([0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4])  # in A/cm^2
-    voltage_curve = np.array([0.92, 0.91, 0.9, 0.89, 0.88, 0.87, 0.86, 0.84, 0.83])  # in V
-    power_curve = np.array([0.00, 0.05, 0.09, 0.13, 0.18, 0.22, 0.26, 0.29, 0.33])  # in W/cm^2
+    J_curve = np.array(
+        [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
+    )  # in A/cm^2
+    voltage_curve = np.array(
+        [0.92, 0.91, 0.9, 0.89, 0.88, 0.87, 0.86, 0.84, 0.83, 0.82, 0.81, 0.79, 0.77, 0.75, 0.73]
+    )  # in V
+    power_curve = np.array(
+        [0.00, 0.05, 0.09, 0.13, 0.18, 0.22, 0.26, 0.29, 0.33, 0.37, 0.41, 0.43, 0.46, 0.49, 0.51]
+    )  # in W/cm^2
 
     # Function to calculate voltage from current density
     V_coefs = np.polyfit(J_curve, voltage_curve, 5)
@@ -260,7 +266,7 @@ class SONGFuelCellPerformanceModel(PerformanceModelBaseClass):
         # TODO: Add consumption of water for steam reforming of natural gas to hydrogen
 
         # Sizing the cells
-        max_cell_power_density = 0.00033  # in kW/cm^2
+        max_cell_power_density = 0.00051  # in kW/cm^2
         stack_size = inputs["system_capacity"][0] / self.config.n_stacks
         cell_active_area = 400  # [cm^2] from Battelle (https://www.energy.gov/sites/prod/files/2018/02/f49/fcto_battelle_mfg_cost_analysis_1%20_to_25kw_pp_chp_fc_systems_jan2017_0.pdf)
         n_cells = round(stack_size / (cell_active_area * max_cell_power_density))
