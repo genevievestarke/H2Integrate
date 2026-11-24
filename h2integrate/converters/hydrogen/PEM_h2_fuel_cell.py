@@ -16,6 +16,14 @@ class PEMH2FuelCellPerformanceConfig(BaseConfig):
         n_stacks (int): The number of stacks in the fuel cell system.
         stack_temperature_K (float): The operating temperature of the fuel cell stack in Kelvin (K).
         hhv (float): Higher heating value of hydrogen in kWh/kg.
+        eol_eff_percent_loss (float): End-of-life (EOL) defined as a percent change in efficiency
+            from beginning-of-life (BOL).
+        uptime_hours_until_eol (int): Number of "on" hours until the fuel cell reaches EOL.
+            Defaults to "80000.0" hours.
+        include_degradation_penalty (bool): Flag to include degradation of the fuel cell due to
+            operational wear.
+        degradation_penalty (float): Degradation penalty applied to the fuel cell performance due to
+            operational wear. Defaults to "0.0".
 
     See :class:`PEMH2FuelCellPerformanceModel` and :doc:`/technology_models/PEM_h2_fuel_cell`.
     """
@@ -24,6 +32,10 @@ class PEMH2FuelCellPerformanceConfig(BaseConfig):
     n_stacks: int = field(validator=validators.ge(0))
     stack_temperature_K: float = field(validator=validators.ge(0))
     hhv: float = field(validator=validators.ge(0))
+    eol_eff_percent_loss: float = field(validator=validators.ge(0))
+    uptime_hours_until_eol: int = field(default=80000.0, validator=validators.ge(0))
+    include_degradation_penalty: bool = field()
+    degradation_penalty: float = field(default=0.0, validator=validators.ge(0))
     # min_system_power_fraction_kw: float
     # fuel_cell_efficiency_hhv: float = field(validator=range_val(0, 1))
 
@@ -212,6 +224,13 @@ class PEMH2FuelCellPerformanceModel(PerformanceModelBaseClass):
             desc="Rated stack efficiency of the fuel cell",
         )
 
+        self.add_output(
+            "time_until_replacement",
+            val=float(self.config.uptime_hours_until_eol),
+            units="h",
+            desc="Time until the fuel cell needs replacement due to operational wear",
+        )
+
         # Default the electricity command value input as the rated capacity
         self.add_input(
             f"{self.commodity}_command_value",
@@ -244,6 +263,21 @@ class PEMH2FuelCellPerformanceModel(PerformanceModelBaseClass):
         n_h2 = 2  # number of electrons transferred per mole of H2
         n_o2 = 4  # number of electrons transferred per mole of O2
         n_h2o = 2  # number of electrons transferred per mole of H2O
+
+        # Degradation parameters
+        include_degradation_penalty = self.config.include_degradation_penalty
+        degradation_penalty = self.config.degradation_penalty
+        if include_degradation_penalty and degradation_penalty == 0:
+            # Raise an error if degradation penalty is enabled but set to 0
+            raise ValueError(
+                "Degradation penalty must be greater than 0 if include_degradation_penalty is True."
+            )
+        elif degradation_penalty > 0 and not include_degradation_penalty:
+            # Raise an error if degradation penalty is set but not included
+            raise ValueError("Degradation penalty is set but include_degradation_penalty is False.")
+        elif include_degradation_penalty and degradation_penalty > 0:
+            # Create a degradation schedule for the fuel cell over the simulation timesteps
+            0 + np.arange(self.n_timesteps) * degradation_penalty
 
         # Sizing the cells
         max_cell_power_density = 0.000334  # in kW/cm^2
@@ -347,6 +381,9 @@ class PEMH2FuelCellPerformanceModel(PerformanceModelBaseClass):
         outputs["rated_stack_efficiency"] = rated_power_production / (
             rated_heat_out + rated_power_production
         )
+
+        # Set replacement parameters
+        np.zeros(self.plant_life)
 
         # TODO: implement a hydrogen and oxygen conversion efficiency based on stack
         #   temperature and other factors
