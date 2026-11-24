@@ -40,7 +40,9 @@ class PEMH2FuelCellPerformanceConfig(BaseConfig):
     # fuel_cell_efficiency_hhv: float = field(validator=range_val(0, 1))
 
 
-def calc_current(system_power_reference, cell_area, n_cells, n_stacks):
+def calc_current(
+    system_power_reference, cell_area, n_cells, n_stacks, fc_degradation_schedule=None
+):
     """_summary_
 
     Args:
@@ -48,14 +50,22 @@ def calc_current(system_power_reference, cell_area, n_cells, n_stacks):
         cell_area (float): cell active area in cm^2
         n_cells (int): number of cells per stack
         n_stacks (int): number of stacks in the system
+        fc_degradation_schedule (np.ndarray, optional): degradation schedule of the fuel cell
+            over time. Defaults to None.
 
     Returns:
             tuple(np.ndarray, np.poly1d): stack current and
                 function to convert from current density to voltage
     """
     # Calculates the current and voltage from IV curve based on power reference
+    # Applies degradation schedule if provided
     #   These current, voltage and power values are from the fuel cell data collected here: https://github.com/ECSIM/pem-dataset1
     #   Using the data from the "Activation Test MEA Standard Protocol (Repeat)" case
+    if fc_degradation_schedule is not None:
+        fc_degradation_schedule = np.array(fc_degradation_schedule)
+    else:
+        fc_degradation_schedule = np.zeros_like(system_power_reference)
+
     J_curve = np.array([0.0356, 0.05413333, 0.0796, 0.11366667, 0.244, 0.454])  # in A/cm^2
     voltage_curve = np.array([0.987, 0.936, 0.884, 0.838, 0.786, 0.736])  # in V
     power_curve = (
@@ -277,7 +287,9 @@ class PEMH2FuelCellPerformanceModel(PerformanceModelBaseClass):
             raise ValueError("Degradation penalty is set but include_degradation_penalty is False.")
         elif include_degradation_penalty and degradation_penalty > 0:
             # Create a degradation schedule for the fuel cell over the simulation timesteps
-            0 + np.arange(self.n_timesteps) * degradation_penalty
+            self.degradation_schedule = 0 + np.arange(self.n_timesteps) * degradation_penalty
+        else:
+            self.degradation_schedule = np.zeros(self.n_timesteps)
 
         # Sizing the cells
         max_cell_power_density = 0.000334  # in kW/cm^2
@@ -312,7 +324,11 @@ class PEMH2FuelCellPerformanceModel(PerformanceModelBaseClass):
 
         # 2. Find stack current from power reference
         commanded_I_stack, V_J_curve = calc_current(
-            power_reference * 1e3, cell_active_area, n_cells, self.config.n_stacks
+            power_reference * 1e3,
+            cell_active_area,
+            n_cells,
+            self.config.n_stacks,
+            fc_degradation_schedule=self.degradation_schedule,
         )  # in A
 
         # 3. Find available hydrogen and oxygen for each timestep
